@@ -1,0 +1,670 @@
+<!doctype html>
+<html>
+<head>
+<title>Pandemic Helper</title>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0"> 
+
+<script>
+
+function PandemicGame(){
+	
+	this.cities={}
+	this.cities['blueCities']=["San Francisco","Chicago","Atlanta","Montreal","New York","Washington","Madrid","London","Paris","Essen","Milan","St Petersburg"];
+	this.cities['yellowCities']=["Los Angeles","Mexico City","Miami","Bogota","Lima","Santiago","Sao Paulo","Buenos Aires","Lagos","Kinshasa","Johannesburg","Khartoum"];
+	this.cities['redCities']=["Beijing","Taipei","Tokyo","Seoul","Shanghai","Hong Kong","Bangkok","Ho Chi Minh City","Jakarta","Manila","Sydney","Osaka"];
+	this.cities['blackCities']=["Riyadh","Chennai","Karachi","Baghdad","Delhi","Kolkata","Mumbai","Cairo","Istanbul","Algiers","Moscow","Tehran"];
+	this.dropDownSelectedColor="";
+	this.citiesInTopDeck=0;
+	this.citiesDrawn=0;
+	this.epidemicCardTotal=0;
+	this.fundedEventCardTotal=0;
+	this.epidemicDrawnForRound=false;
+	this.cardRoundDistribution={};
+	this.totalDrawCount=0;
+	this.drawCountInRound=0;
+	this.round=0;
+	this.numberOfPlayers=0;
+	this.totalCardsInDeck=0;
+	this.colors=["red","blue","yellow","black"];
+	this.remainingCities={};
+	for(var i=0;i<this.colors.length;i++){
+		this.remainingCities[this.colors[i]+'Cities']=this.cities[this.colors[i]+'Cities'].slice();
+	}
+	this.calculateCardsInRound=function(){
+		var cardsDealtToPlayers=2;
+		if(this.numberOfPlayers===2){
+			cardsDealtToPlayers=4;
+		}else if(this.numberOfPlayers===3){
+			cardsDealtToPlayers=3
+		}
+		var cards=48+this.fundedEventCardTotal-(cardsDealtToPlayers*this.numberOfPlayers);
+		var infectCardsInPlay=this.epidemicCardTotal;
+		this.totalCardsInDec=cards+infectCardsInPlay;
+		for(var i=0;i<this.epidemicCardTotal;i++){
+			var cardsInRound=Math.ceil(cards/infectCardsInPlay);
+			cards-=cardsInRound;
+			infectCardsInPlay--;
+			this.cardRoundDistribution[i]=cardsInRound;
+		}
+	}
+	this.convertCityNameToColor=function(cityName){
+		for(var i=0;i<this.colors.length;i++){
+			if(this.cities[this.colors[i]+'Cities'].indexOf(cityName)>-1){
+				return this.colors[i];
+			}
+		}
+	};
+	this.removeItemFromCityArray=function(cityName){
+		var cityColor=this.convertCityNameToColor(cityName);
+		if(this.remainingCities[cityColor+'Cities'].indexOf(cityName)>-1){
+			this.remainingCities[cityColor+'Cities'].splice(this.remainingCities[cityColor+'Cities'].indexOf(cityName),1);
+		}
+	};
+	this.addItemToCityArray=function(cityName){
+		var cityColor=this.convertCityNameToColor(cityName);
+		if(this.remainingCities[cityColor+'Cities'].indexOf(cityName)>-1){
+			this.remainingCities[cityColor+'Cities'].push(cityName);
+		}
+	};
+	this.sortArrayByColorAndCityName=function(arrayToSort){
+		var cityHashMap={};
+		var sortedArray=[];
+		for(var i=0;i<arrayToSort.length;i++){
+			var cityName=arrayToSort[i];
+			var cityColor=Pan.convertCityNameToColor(arrayToSort[i]);
+			if(cityHashMap[cityColor]){
+				cityHashMap[cityColor].push(cityName);
+				cityHashMap[cityColor].sort();
+			}else{
+				cityHashMap[cityColor]=[cityName];
+			}
+		}
+		for(color in cityHashMap){
+			for(city in cityHashMap[color]){
+				sortedArray.push(cityHashMap[color][city]);
+			}
+		}
+		return sortedArray;
+	};
+	this.drawCard=function(epidemicCard){
+		if(epidemicCard===true){
+			this.epidemicDrawnForRound=true;
+		}
+		this.totalDrawCount++;
+		this.drawCountInRound++;
+	};
+}
+
+function updateGameHash(){
+	var newHash=[];
+	for(var element in Pan){
+		if(element!=="cities"&&element!=="remainingCities"&&typeof Pan[element]!="function"&&element!=="colors"){
+			newHash.push(Pan[element]);
+			//console.log(JSON.stringify(element));
+			//console.log(JSON.stringify(Pan[element]));
+		}
+	}
+	
+	var cityDivs=$(".cityName");
+	for(var i=0;i<cityDivs.length;i++){
+		var city=cityDivs[i];
+		if(city.classList.contains("whiteBack")){
+			
+		}else if(city.classList.contains("grayBack")){
+			
+		}else{
+			console.log(city.classList);
+		}
+	}
+	
+	location.hash=JSON.stringify(newHash);
+}
+
+function applyClick(){
+
+	$(".citySelectionWrapper").click(function(){
+		hideDropDown();
+	});
+	$("#viewArea").click(function(){
+		hideDropDown();
+	});
+
+	$(".citySelection").click(function(event){
+		//ACTION: City added to board
+		
+		event.stopPropagation();
+		$("#epidemicNotification").hide();
+		$("#startNotication").hide();
+		//var cityColor=event.target.innerText;
+		Pan.removeItemFromCityArray(event.target.innerText)
+		var cityName=event.target.innerText;
+		var color=Pan.convertCityNameToColor(event.target.innerText);
+		$("#viewArea").append("<div class=\"cityItem\"><div class=\"cityName grayBack "+color+"Back "+color+"Border\">"+cityName+"</div><div class=\"cityDelete\" data=\""+cityName+"\">&#10060;</div><div class=\"cityChange\" data=\""+cityName+"\">&#10003</div><div class=\"drawPercent\"></div></div>");
+		hideDropDown();	
+		cityChangeClick();
+		displayDrawPercentages();
+		updateGameHash();
+	});
+}
+
+function displayDrawPercentages(){
+	var cityDivs=$(".cityName");
+	var citiesToCalc=[];
+	for(var i=0;i<cityDivs.length;i++){
+		var city=cityDivs[i];
+		var percentage=city.nextElementSibling.nextElementSibling.nextElementSibling;
+		if(city.classList.contains("whiteBack")){
+			percentage.innerText="0%";
+		}else if(city.classList.contains("grayBack")){
+			percentage.innerText="0%";
+		}else{
+			citiesToCalc.push(percentage);
+		}
+	}
+	for(var i=0;i<citiesToCalc.length;i++){
+		citiesToCalc[i].innerText=((1/citiesToCalc.length)*100).toFixed(0)+"%";
+	}
+	
+}
+
+function cityChangeClick(){
+	
+	$(".cityChange").unbind('click').click(function(event){
+		//ACTION: CITY STATUS CHANGED
+		var cityName=event.target.attributes.data.value;
+		var cityDiv=event.target.parentNode.children[0];
+		if(cityDiv.classList.contains("whiteBack")){
+			//was white, now is colored
+			cityDiv.classList.remove("whiteBack");
+			var color=Pan.convertCityNameToColor(cityName);
+			if(color==="black"){
+				cityDiv.style.color="white";
+			}else{
+				cityDiv.style.color="black";
+			}
+		}else if(cityDiv.classList.contains("grayBack")){
+			//was gray, now is white
+			cityDiv.classList.remove('grayBack');
+			cityDiv.style.color="black";
+			cityDiv.classList.add('whiteBack');
+			Pan.citiesDrawn--;
+		}else{
+			//was colored, now is gray
+			//drew card
+			Pan.citiesDrawn++;
+			cityDiv.style.color="black";
+			cityDiv.classList.add('grayBack');
+		}
+		if(Pan.citiesDrawn===Pan.citiesInTopDeck){
+			var cities=$(".cityName");
+			for(var i=0;i<cities.length;i++){
+				if(cities[i].classList.contains("whiteBack")){
+					if(Pan.convertCityNameToColor(cities[i].innerText)==="black"){
+						cities[i].style.color="white";
+					}
+					cities[i].classList.remove("whiteBack");
+				}
+			}
+		}
+		displayDrawPercentages();
+		updateGameHash();
+	});
+	$(".cityDelete").unbind('click').click(function(){
+		//ACTION: CITY REMOVED FROM BOARD
+		var cityName=event.target.parentNode.children[0].innerText;
+		Pan.addItemToCityArray(cityName);
+		event.target.parentNode.remove();
+		updateGameHash();
+	});
+}
+
+function hideDropDown(){
+	var dropDown=$("#dropDown");
+	Pan.dropDownSelectedColor="";
+	dropDown.hide();
+}
+
+
+function displayEpiPercentage(){
+	var cardsRemainingInRound=(Pan.cardRoundDistribution[Pan.round]+1)-Pan.drawCountInRound;
+	//if no cards left in round, and not last round
+	if(cardsRemainingInRound===0){
+		console.log("no cards remaining in round, incrementing!");
+		Pan.round++;
+		Pan.epidemicDrawnForRound=false;
+		Pan.drawCountInRound=0;
+		epidemicBind();
+		if(Pan.round===Pan.epidemicCardTotal){
+			//if no cards left and is last round, don't increment, end
+			console.log("NO CARDS LEFT, YOU LOSE!");
+			$("#drawCard").unbind('click');
+			$("#epidemic").unbind('click');
+			$("#loseMessage").show();
+			return;
+		}
+		displayEpiPercentage();
+	}else{
+		if(Pan.epidemicDrawnForRound===false){
+			var epiPercent=((1/(cardsRemainingInRound))*100).toFixed(0)+"%";
+			//console.log("1 in "+(cardsRemainingInRound)+", "+epiPercent);
+			$("#stats").html("1 in "+(cardsRemainingInRound)+", "+epiPercent);
+		}else{
+			//console.log("No Epidemic for "+(cardsRemainingInRound)+" draws");
+			$("#stats").html("0% for "+(cardsRemainingInRound)+" draws");
+			$("#epidemic").unbind('click');
+		}
+		$("#cardsLeft").html("["+(Pan.totalCardsInDec-Pan.totalDrawCount)+"]");
+	}
+	//update epidemics left
+	var epiCount=Pan.epidemicCardTotal-Pan.round-(Pan.epidemicDrawnForRound ? 1:0);
+	$("#epiLeft").html("["+epiCount+"]");
+}
+
+function epidemicBind(){
+	//ACTION: EPIDEMIC DRAWN
+	$("#epidemic").click(function(){
+		$("#epidemicNotification").css("display","block");
+		var cities=$(".cityName");
+		var drawnCards=[];
+		var notDrawnCards=[];
+		for(var i=0;i<cities.length;i++){
+			var cityName=cities[i].innerText;
+			//Card was drawn
+			if(cities[i].classList.length === 4 && !(cities[i].classList.contains("whiteBack"))){
+				drawnCards.push(cityName);
+			}else{
+				notDrawnCards.push(cityName);
+			}
+		}
+		
+		drawnCardsSorted=Pan.sortArrayByColorAndCityName(drawnCards);
+		Pan.citiesInTopDeck=drawnCards.length;
+		Pan.citiesDrawn=0;
+		$("#viewArea").html("");
+		
+		for(i=0;i<drawnCardsSorted.length;i++){
+			var cityName=drawnCardsSorted[i];
+			var color=Pan.convertCityNameToColor(cityName);
+			var fontColor="black";
+			if(color==="black"){
+				fontColor="white";
+			}
+			$("#viewArea").append("<div class=\"cityItem\"><div style=\"color:"+fontColor+"\" class=\"cityName "+color+"Back "+color+"Border\">"+cityName+"</div><div class=\"cityDelete\" data=\""+cityName+"\">&#10060;</div><div class=\"cityChange\" data=\""+cityName+"\">&#10003</div><div class=\"drawPercent\"></div></div>");
+		}
+		
+		for(i=0;i<notDrawnCards.length;i++){
+			var cityName=notDrawnCards[i];
+			var color=Pan.convertCityNameToColor(cityName);
+			$("#viewArea").append("<div class=\"cityItem\"><div class=\"cityName whiteBack "+color+"Back "+color+"Border\">"+cityName+"</div><div class=\"cityDelete\" data=\""+cityName+"\">&#10060;</div><div class=\"cityChange\" data=\""+cityName+"\">&#10003;</div><div class=\"drawPercent\"></div></div>");
+		}
+		cityChangeClick();
+		applyClick();
+		Pan.drawCard(true);
+		displayEpiPercentage();
+		displayDrawPercentages();
+		updateGameHash();
+	});
+}
+
+// toggle full screen
+function toggleFullScreen() {
+	if(!document.fullscreenElement &&    // alternative standard method
+		!document.mozFullScreenElement && !document.webkitFullscreenElement) {  // current working methods
+		if(document.documentElement.requestFullscreen) {
+			document.documentElement.requestFullscreen();
+		}else if (document.documentElement.mozRequestFullScreen) {
+			document.documentElement.mozRequestFullScreen();
+		}else if (document.documentElement.webkitRequestFullscreen) {
+			document.documentElement.webkitRequestFullscreen(Element.ALLOW_KEYBOARD_INPUT);
+		}
+	}else {
+		if(document.cancelFullScreen) {
+			document.cancelFullScreen();
+		}else if (document.mozCancelFullScreen) {
+			document.mozCancelFullScreen();
+		}else if (document.webkitCancelFullScreen) {
+			document.webkitCancelFullScreen();
+		}
+	}
+}
+
+$(document).ready(function() {
+	
+	Pan=new PandemicGame();
+	function displayCitySelection(type,color){		
+		var dropDown=$("#dropDown");
+		if(Pan.dropDownSelectedColor===color){
+			hideDropDown();
+		}else{
+			Pan.dropDownSelectedColor=color;
+			var stringBuilder="";
+			for(var i=0;i<type.length;i++){
+				stringBuilder+="<div class=\"citySelectionWrapper\"><div class=\"citySelection "+color+"Border\"\" data=\""+color+"\">"+type[i]+"</div></div>";
+			}
+			dropDown.html(stringBuilder).show();
+			applyClick();
+		}
+	}
+	$("#loseMessage").hide();
+	$(".button").on("click", function() {
+		var button = $(this);
+		var minValue=parseInt(button.parent().find("input")[0].attributes[1].value);
+		var maxValue=parseInt(button.parent().find("input")[0].attributes[2].value);
+		var oldValue = button.parent().find("input").val();
+		var newVal = parseFloat(oldValue) - 1;
+		if (button.text() == "+") {
+			newVal = parseFloat(oldValue) + 1;
+		} 
+		if(newVal<=maxValue && newVal >= minValue){
+			button.parent().find("input").val(newVal);
+		}
+	});
+	$("#saveButton").click(function(){
+		//ACTION: GAME STARTED
+		console.log(Pan);
+		if(document.getElementById("fullScreenCheckBox").checked){
+			toggleFullScreen();
+		}
+		Pan.epidemicCardTotal=parseInt($("#epidemicCount").val());
+		Pan.fundedEventCardTotal=parseInt($("#fundedEventCount").val());
+		Pan.numberOfPlayers=parseInt($("#numberOfPlayers").val());
+		Pan.calculateCardsInRound();
+		$("#startupOptions").hide();
+		$("#bottomWrapper").show();
+		$("#citySelector").show();
+		for(var i=0;i<Pan.colors.length;i++){
+			$("#"+Pan.colors[i]).click(function(){
+				var clickedColor=event.target.attributes.id.value;
+				displayCitySelection(Pan.remainingCities[clickedColor+'Cities'],clickedColor);
+			});
+		}
+		displayEpiPercentage();
+		epidemicBind();
+		$("#drawCard").click(function(){
+			//ACTION CARD DRAWN
+			Pan.drawCard();
+			displayEpiPercentage();
+			updateGameHash();
+		});
+		updateGameHash();
+	});
+});
+
+$(window).on('hashchange', function(event) {
+	var hash=location.hash.substring(1);
+	console.log("Hash Changed!");
+	console.log(hash);
+	console.log(Pan);
+});
+
+</script>
+<style>
+*{
+	padding:0;
+	margin:0;	
+	font-size:90%;
+	font-size:90%;
+	font-family:Helvetica, sans-serif;
+}
+body{
+	user-select: none;
+	overflow:hidden;
+}
+#citySelector{
+	width:100%;
+	position:fixed;
+	z-index:10;
+	font-size:135%;
+	display:none;
+}
+.cityButton{
+	display:inline-block;
+	width:25%;
+	font-family:fantasy;
+	height:40px;
+	line-height:40px;
+	color:white;
+	font-size:1.5em;
+	text-align:center;
+	cursor:pointer;
+	padding:0px;
+	margin:0px;
+	-webkit-text-stroke: 1.0px #000000;
+	-webkit-text-fill-color: #FFFFFF;
+	color:white;
+
+}
+.redBack{background-color:red}
+.blueBack{background-color:blue}
+.blackBack{background-color:black}
+.yellowBack{background-color:#FFED14}
+.redBorder{border:1px solid red}
+.blueBorder{border:1px solid blue}
+.blackBorder{border:1px solid black}
+.yellowBorder{border:1px solid #FFED14}
+.whiteBack{background-color:#FFF}
+.grayBack{background-color:#CCC !important}
+#dropDown{
+	position:absolute;
+	top:40px;
+	width:100%;
+	z-index:10;
+	background-color:rgba(255, 255, 255, 0.6);
+}
+.citySelectionWrapper{
+	margin-bottom:5px;
+	position:relative;
+	width:100%;
+	height:30px;
+}
+.citySelection{
+	position:absolute;
+	left:25%;
+	width:50%;
+	margin:0 auto;
+	color:black;
+	font-size:20px;
+	font-family:fantasy;
+	text-align:center;
+	line-height:30px;
+	margin:2px;
+	border-radius:15px;
+	background-color:white;
+	cursor:pointer;
+}
+#viewArea{
+	position:absolute;
+	width:100%;
+	height:calc(100% - 85px);
+	color:white;
+   font-size:30px;
+   font-family:fantasy;
+   text-align:center;
+   line-height:30px;
+   margin:2px;
+   margin-top:1px;
+   top:40px;
+	z-index:0;
+	overflow:auto;
+}
+.cityItem{
+	width:100%;
+	margin-bottom:4px;
+	height:30px;
+		color:black;
+}
+.cityName{
+	font-size:100%;
+	width:70%;
+	float:left;
+	 border-radius:15px;
+	letter-spacing: px;
+	overflow:hidden;
+
+}
+.cityChange{
+	width:40px;
+	margin-left:5px;
+	float:left;
+	cursor:pointer;
+}
+.cityDelete{
+	width:15px;
+	margin-right:5px;
+	float:right;
+	cursor:pointer;
+	font-size:50%;
+}
+
+#epidemicNotification{
+	position:fixed;
+	width:100%;
+	top:40px;
+	height:60px;
+	font-size:20px;
+	line-height:60px;
+	font-family:fantasy;
+	color:white;
+	background-color:#CCC;
+	color:black;
+	text-align:center;
+	z-index:5;
+	display:none;
+}
+#bottomWrapper{
+	display:none;
+	position:fixed;
+	width:100%;
+	height:40px;
+	bottom:0px;
+	line-height:40px;
+	color:black;
+	font-family:fantasy;
+	text-align:center;
+	font-size:2em;
+}
+#epidemic{
+	float:left;
+	width:40%;
+	background-color:lime;
+	cursor:pointer;
+	height:39px;
+}
+#stats{
+	float:left;
+	width:30%;
+	height:39px;
+	font-size:.8em;
+	line-height:40px;
+	background-color:#white;
+	border-top:1px solid gray;
+}
+#drawCard{
+	float:right;
+	height:39px;
+	width:30%;
+	background-color:#CCC;
+	cursor:pointer;
+}
+#startNotication{
+	position:fixed;
+	width:100%;
+	top:40px;
+	height:60px;
+	font-size:20px;
+	line-height:60px;
+	font-family:fantasy;
+	color:white;
+	background-color:#CCC;
+	color:black;
+	text-align:center;
+	z-index:5;
+	display:none;
+}
+
+#epiMessage{
+	padding:5px;
+}
+#startupOptions,#loseMessage{
+	position:fixed;
+	top:10px;
+	height:290px;
+	width:300px;
+	left:calc(50% - 150px);
+	background-color:#393939;
+	text-align:center;
+	font-size:200%;
+	z-index:15;
+	color:white;
+	border-radius:15px;
+}
+#loseMessage{
+	line-height:190px;
+}
+#saveButton{
+	background-color:#ccc;
+	color:black;
+	margin: 0 auto;
+	margin-top:15px;
+	height:40px;
+	line-height:40px;
+	width:80px;
+	font-size:110%;
+	border-radius:8px;
+	cursor:pointer;
+	box-shadow: 0px 0px 8px 4px white;
+}
+#cardsLeft{
+	margin-left:5px;
+}
+.drawPercent{
+	float:left;
+	margin-left:0px;
+	font-size:.5em;
+}
+.button{
+	margin: 0 0 0 5px;
+
+    cursor: pointer;
+    width: 29px;
+    height: 29px;
+    text-align: center;
+	display:inline-block;
+}
+
+input[type="number"]{
+	width:30px;
+}
+
+@media only screen and (max-device-width: 500px) {
+
+}
+</style>
+</head>
+<body>
+<div id="startupOptions">
+<span><label for="numberOfPlayers" >Number of Players:</label><br>
+<input id="numberOfPlayers" min="2" max="4" value="3" type="number"><div class="inc button">+</div><div class="dec button">-</div></span><br>
+<span><label for="epidemicCount">Number of Epidemic Cards:</label><br>
+<input id="epidemicCount" min="4" max="6" type="number" value="5"><div class="inc button">+</div><div class="dec button">-</div><br></span>
+<span><label for="fundedEventCount" >Number of Funded Events:</label><br>
+<input id="fundedEventCount" min="0" max="20"  value="0" type="number"><div class="inc button">+</div><div class="dec button">-</div></span><br>
+
+<label for="fullScreenCheckBox" >Fullscreen:</label>&nbsp;<input id="fullScreenCheckBox" type="checkbox" checked="true">
+<div id="saveButton">Start!</div>
+</div>
+<div id="loseMessage">No cards left, you lose.</div>
+<div id="startNotication"><span id="startMessage">^ Select your starting infected cities ^<span></div>
+<div id="epidemicNotification"><span id="epiMessage">^ Select your infect card ^<span></div>
+<div id="citySelector">
+<div class="cityButton redBack" id="red">Red</div><div class="cityButton blueBack" id="blue">Blue</div><div class="cityButton yellowBack" id="yellow">Yellow</div><div class="cityButton blackBack" id="black">Black</div>
+</div>
+<div id="dropDown"></div>
+<div id="viewArea"></div>
+
+<div id="bottomWrapper">
+<div id="epidemic">Epidemic! <span id="epiLeft"></span></div><div id="stats"></div><div id="drawCard">Draw!<span id="cardsLeft"></span></div>
+</div>
+</body>
+</html>
